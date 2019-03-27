@@ -26,8 +26,12 @@ type Ad struct {
 	AdScore      float64 `json:"ad_score"`
 }
 
-// if exists : error is nil
-// not exist : error is not nil
+/*
+return:
+	ad exists: true, nil
+	ad not exists: false, nil
+	other error: false, err
+*/
 func checkAdvertiserExists(db *sql.DB, advertiser Advertiser) (bool, error) {
 	var name string
 	err := db.QueryRow("SELECT name FROM advertiser WHERE name = ?", advertiser.Name).Scan(&name)
@@ -43,6 +47,13 @@ func checkAdvertiserExists(db *sql.DB, advertiser Advertiser) (bool, error) {
 	return true, nil
 }
 
+/*
+use "checkAdvertiserExists" to check if the advertiser already exists
+then, insert an advertiser into advertiser table
+return:
+	err
+	nil
+*/
 func insertAdvertiser(advertiser Advertiser) error {
 	db, err := sql.Open("mysql", "root:root@(localhost:3306)/AdSysGo")
 	if err != nil {
@@ -69,6 +80,10 @@ func insertAdvertiser(advertiser Advertiser) error {
 	return nil
 }
 
+/*
+HanldeFunction
+use "insertAdvertiser" to add a row of an advertiser into advertiser table
+*/
 func handleFuncAddAdvertiser(w http.ResponseWriter, req *http.Request) {
 	fmt.Println("Received one advertiser insertion request")
 	w.Header().Set("Content-Type", "text/plain")
@@ -102,6 +117,12 @@ func handleFuncAddAdvertiser(w http.ResponseWriter, req *http.Request) {
 
 }
 
+/*
+add an ad into ad table
+return:
+	error
+	nil
+*/
 func insertAd(ad Ad) error {
 	db, err := sql.Open("mysql", "root:root@(localhost:3306)/AdSysGo")
 	if err != nil {
@@ -117,6 +138,10 @@ func insertAd(ad Ad) error {
 	return nil
 }
 
+/*
+HanldeFunction
+use "insertAd" to add an ad into ad table
+*/
 func handleFuncAddAd(w http.ResponseWriter, req *http.Request) {
 	fmt.Println("Received one ad insertion request")
 	w.Header().Set("Content-Type", "text/plain")
@@ -142,8 +167,12 @@ func handleFuncAddAd(w http.ResponseWriter, req *http.Request) {
 
 }
 
-// select all advertisements from database
-// return a slice of Ad type
+/*
+select all ads from database
+convert each ad into type Ad
+return:
+	a slice of type Ad
+*/
 func selectAllAds() ([]Ad, error) {
 	// connect to MySQL database
 	db, err := sql.Open("mysql", "root:root@(localhost:3306)/AdSysGo")
@@ -179,20 +208,26 @@ func selectAllAds() ([]Ad, error) {
 	return Ads, nil
 }
 
+/*
+update the budget of the chosen advertiser
+return
+*/
 func updateBudget(cost float64, advertiserID int) error {
+	// connect to database
 	db, err := sql.Open("mysql", "root:root@(localhost:3306)/AdSysGo")
 	if err != nil {
 		return errors.New("Failed to connect the database")
 	}
 	defer db.Close()
-	fmt.Println(advertiserID)
 
+	// select advertiser with advertiserID
 	sele, err := db.Query("SELECT budget FROM advertiser WHERE advertiser_id=(?)", advertiserID)
 	if err != nil {
 		return errors.New("Failed to select from advertiser table")
 	}
 	defer sele.Close()
 
+	// get old budget from selected result
 	var newBudget float64
 	for sele.Next() {
 		var nilBudget sql.NullFloat64
@@ -202,6 +237,7 @@ func updateBudget(cost float64, advertiserID int) error {
 		newBudget = nilBudget.Float64 - cost
 	}
 
+	// update old budget with new budget
 	update, err := db.Query("UPDATE advertiser SET budget=(?) WHERE advertiser_id=(?)", newBudget, advertiserID)
 	if err != nil {
 		return errors.New("Failed to update budget")
@@ -212,6 +248,12 @@ func updateBudget(cost float64, advertiserID int) error {
 
 }
 
+/*
+rank all ads and get the top two
+use second-place ad to compute the cpc price of the top-ranked ad
+update the budget of the advertiser
+response the client with the chosen ad data
+*/
 func handleFuncChooseAd(w http.ResponseWriter, req *http.Request) {
 	fmt.Println("Received one request for choosing an ad")
 	w.Header().Set("Content-Type", "text/plain")
@@ -268,8 +310,7 @@ func handleFuncChooseAd(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	// testing =================
-	// convert all ads information into Json format
+	// convert chosen ad data into Json format
 	topAdJSON, err := json.Marshal(ad1)
 	if err != nil {
 		http.Error(w, "Failed to parse allAds into JSON format", 500)
@@ -277,11 +318,9 @@ func handleFuncChooseAd(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// write the chosen ad json to response
 	w.Write(topAdJSON)
-	// rank them and get the top ranked two ads
-	// use second-place ad to compute the cpc price of the top-ranked ad
-	// update the budget of the advertiser
-	// response the client with ad_id and advertiser_id budget of the chosen ad
+
 }
 
 func main() {
