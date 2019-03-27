@@ -174,7 +174,6 @@ func selectAllAds() ([]Ad, error) {
 		ad.Bid = nilBid.Float64
 		ad.AdScore = nilAdScore.Float64
 		Ads = append(Ads, ad)
-		fmt.Printf("169 %v\n", ad.AdID)
 	}
 	return Ads, nil
 }
@@ -199,19 +198,39 @@ func handleFuncChooseAd(w http.ResponseWriter, req *http.Request) {
 		}
 		return
 	}
+	if len(allAds) < 2 {
+		http.Error(w, "No enough ads in database.", 400)
+	}
+
+	var ad1, ad2 Ad
+	if allAds[0].Bid*allAds[0].AdScore >= allAds[1].Bid*allAds[1].AdScore {
+		ad1, ad2 = allAds[0], allAds[1]
+	} else {
+		ad1, ad2 = allAds[1], allAds[0]
+	}
+
+	for i := 2; i < len(allAds); i++ {
+		if allAds[i].Bid*allAds[i].AdScore > ad1.Bid*ad1.AdScore {
+			ad1 = allAds[i]
+		} else if allAds[i].Bid*allAds[i].AdScore > ad2.Bid*ad2.AdScore {
+			ad2 = allAds[i]
+		}
+	}
+
+	topTwoAds := [2]Ad{ad1, ad2}
 
 	// select the top two ads with highest rank (score * bid)
 
 	// testing =================
 	// convert all ads information into Json format
-	allAdsJSON, err := json.Marshal(allAds)
+	topTwoAdsJSON, err := json.Marshal(topTwoAds)
 	if err != nil {
 		http.Error(w, "Failed to parse allAds into JSON format", 500)
 		fmt.Printf("Failed to parse allAds into JSON format %v.\n", err)
 		return
 	}
 
-	w.Write(allAdsJSON)
+	w.Write(topTwoAdsJSON)
 	// rank them and get the top ranked two ads
 	// use second-place ad to compute the cpc price of the top-ranked ad
 	// update the budget of the advertiser
