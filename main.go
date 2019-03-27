@@ -12,8 +12,9 @@ import (
 
 // Advertiser type
 type Advertiser struct {
-	Name   string  `json:"name"`
-	Budget float64 `json:"budget"`
+	AdvertiserID int     `json:"advertiser_id"`
+	Name         string  `json:"name"`
+	Budget       float64 `json:"budget"`
 }
 
 // Ad type
@@ -21,7 +22,7 @@ type Ad struct {
 	AdID         string  `json:"ad_id"`
 	Bid          float64 `json:"bid"`
 	ImageURL     string  `json:"image_url"`
-	AdvertiserID string  `json:"advertiser_id"`
+	AdvertiserID int     `json:"advertiser_id"`
 	AdScore      float64 `json:"ad_score"`
 }
 
@@ -68,7 +69,7 @@ func insertAdvertiser(advertiser Advertiser) error {
 	return nil
 }
 
-func handleFuncAdvertiser(w http.ResponseWriter, req *http.Request) {
+func handleFuncAddAdvertiser(w http.ResponseWriter, req *http.Request) {
 	fmt.Println("Received one advertiser insertion request")
 	w.Header().Set("Content-Type", "text/plain")
 
@@ -116,7 +117,7 @@ func insertAd(ad Ad) error {
 	return nil
 }
 
-func handleFuncAd(w http.ResponseWriter, req *http.Request) {
+func handleFuncAddAd(w http.ResponseWriter, req *http.Request) {
 	fmt.Println("Received one ad insertion request")
 	w.Header().Set("Content-Type", "text/plain")
 
@@ -178,6 +179,39 @@ func selectAllAds() ([]Ad, error) {
 	return Ads, nil
 }
 
+func updateBudget(cost float64, advertiserID int) error {
+	db, err := sql.Open("mysql", "root:root@(localhost:3306)/AdSysGo")
+	if err != nil {
+		return errors.New("Failed to connect the database")
+	}
+	defer db.Close()
+	fmt.Println(advertiserID)
+
+	sele, err := db.Query("SELECT budget FROM advertiser WHERE advertiser_id=(?)", advertiserID)
+	if err != nil {
+		return errors.New("Failed to select from advertiser table")
+	}
+	defer sele.Close()
+
+	var newBudget float64
+	for sele.Next() {
+		var nilBudget sql.NullFloat64
+		if err = sele.Scan(&nilBudget); err != nil {
+			return errors.New("Failed to get old budget")
+		}
+		newBudget = nilBudget.Float64 - cost
+	}
+
+	update, err := db.Query("UPDATE advertiser SET budget=(?) WHERE advertiser_id=(?)", newBudget, advertiserID)
+	if err != nil {
+		return errors.New("Failed to update budget")
+	}
+	defer update.Close()
+
+	return nil
+
+}
+
 func handleFuncChooseAd(w http.ResponseWriter, req *http.Request) {
 	fmt.Println("Received one request for choosing an ad")
 	w.Header().Set("Content-Type", "text/plain")
@@ -198,6 +232,8 @@ func handleFuncChooseAd(w http.ResponseWriter, req *http.Request) {
 		}
 		return
 	}
+
+	// select the top two ads (chosen by bid * adscore)
 	if len(allAds) < 2 {
 		http.Error(w, "No enough ads in database.", 400)
 	}
@@ -217,20 +253,31 @@ func handleFuncChooseAd(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	topTwoAds := [2]Ad{ad1, ad2}
-
-	// select the top two ads with highest rank (score * bid)
+	// compute CPC of first advertisement
+	cost := ad2.Bid*ad2.AdScore/ad1.AdScore + 0.01
+	// update budget of corresponding advertiser
+	if err := updateBudget(cost, ad1.AdvertiserID); err != nil {
+		if err.Error() == "Failed to connect the database" {
+			http.Error(w, "Failed to connect the database.", 500)
+		} else if err.Error() == "Failed to select from advertiser table" {
+			http.Error(w, "Failed to select from advertiser table.", 500)
+		} else if err.Error() == "Failed to get old budget" {
+			http.Error(w, "Failed to get old budget.", 500)
+		} else if err.Error() == "Failed to update budget" {
+			http.Error(w, "Failed to update budget.", 500)
+		}
+	}
 
 	// testing =================
 	// convert all ads information into Json format
-	topTwoAdsJSON, err := json.Marshal(topTwoAds)
+	topAdJSON, err := json.Marshal(ad1)
 	if err != nil {
 		http.Error(w, "Failed to parse allAds into JSON format", 500)
 		fmt.Printf("Failed to parse allAds into JSON format %v.\n", err)
 		return
 	}
 
-	w.Write(topTwoAdsJSON)
+	w.Write(topAdJSON)
 	// rank them and get the top ranked two ads
 	// use second-place ad to compute the cpc price of the top-ranked ad
 	// update the budget of the advertiser
@@ -241,9 +288,9 @@ func main() {
 	fmt.Println("Start Ad System")
 
 	// handler1: post: add advertiser into db
-	http.HandleFunc("/advertiser", handleFuncAdvertiser)
+	http.HandleFunc("/addAdvertiser", handleFuncAddAdvertiser)
 	// handler2: post: add ad into db
-	http.HandleFunc("/ad", handleFuncAd)
+	http.HandleFunc("/addAd", handleFuncAddAd)
 	// handler3: get: retrieve top ranked ad from db and update dudget of the advertiser
 	http.HandleFunc("/chooseAd", handleFuncChooseAd)
 
