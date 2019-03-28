@@ -10,7 +10,7 @@ import (
 func main() {
 
 	// connect to db
-	db, err := sql.Open("mysql", "root:root@(localhost:3306)/AdSysGo")
+	db, err := sql.Open("mysql", "root:root@tcp(13.59.38.240:9500)/ad_sys")
 	// if there is an error opening the connection, handle it
 	if err != nil {
 		panic(err.Error())
