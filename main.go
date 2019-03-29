@@ -10,6 +10,11 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
+const (
+	mysqlDataSourceName = "root:root@tcp(www.fyz34.com:9500)/ad_sys"
+	// mysqlDataSourceName = "root:root@(localhost:3306)/AdSysGo"
+)
+
 // Advertiser type
 type Advertiser struct {
 	AdvertiserID int     `json:"advertiser_id"`
@@ -19,152 +24,27 @@ type Advertiser struct {
 
 // Ad type
 type Ad struct {
-	AdID         string  `json:"ad_id"`
+	AdID         int     `json:"ad_id"`
 	Bid          float64 `json:"bid"`
 	ImageURL     string  `json:"image_url"`
 	AdvertiserID int     `json:"advertiser_id"`
 	AdScore      float64 `json:"ad_score"`
 }
 
-/*
-return:
-	ad exists: true, nil
-	ad not exists: false, nil
-	other error: false, err
-*/
-func checkAdvertiserExists(db *sql.DB, advertiser Advertiser) (bool, error) {
-	var name string
-	err := db.QueryRow("SELECT name FROM advertiser WHERE name = ?", advertiser.Name).Scan(&name)
-	// fail to select
-	if err != nil && err != sql.ErrNoRows {
-		return false, errors.New("Failed to SELECT from advertiser table")
-	}
-	// not exist
-	if err == sql.ErrNoRows {
-		return false, nil
-	}
-	// exist
-	return true, nil
+// AddBudgetProcess type
+type AddBudgetProcess struct {
+	AdvertiserID int     `json:"advertiser_id"`
+	AddBudget    float64 `json:"add_budget"`
 }
 
-/*
-use "checkAdvertiserExists" to check if the advertiser already exists
-then, insert an advertiser into advertiser table
-return:
-	err
-	nil
-*/
-func insertAdvertiser(advertiser Advertiser) error {
-	db, err := sql.Open("mysql", "root:root@(localhost:3306)/AdSysGo")
-	if err != nil {
-		return errors.New("Failed to connect to MySQL database")
-	}
-	defer db.Close()
-
-	// check if the advertiser already exists
-	exists, err := checkAdvertiserExists(db, advertiser)
-	if err != nil {
-		return errors.New("Failed to select from advertiser table")
-	}
-	if exists {
-		return errors.New("Advertiser already exists")
-	}
-
-	// if not exist, insert the advertiser into advertiser table
-	insert, err := db.Query("INSERT INTO advertiser (name, budget) VALUES(?, ?)", advertiser.Name, advertiser.Budget)
-	if err != nil {
-		return errors.New("Failed to insert into advertiser table")
-	}
-	defer insert.Close()
-
-	return nil
+// SearchAdvertiserProcess type
+type SearchAdvertiserProcess struct {
+	Name string `json:"name"`
 }
 
-/*
-HanldeFunction
-use "insertAdvertiser" to add a row of an advertiser into advertiser table
-*/
-func handleFuncAddAdvertiser(w http.ResponseWriter, req *http.Request) {
-	fmt.Println("Received one advertiser insertion request")
-	w.Header().Set("Content-Type", "text/plain")
-
-	if req.Method != "POST" {
-		return
-	}
-
-	// decode the json format info into Advertiser type
-	decoder := json.NewDecoder(req.Body)
-	var advertiser Advertiser
-	if err := decoder.Decode(&advertiser); err != nil {
-		http.Error(w, "Cannot decode advertiser's data from client", 400)
-		fmt.Println("Cannot decode advertiser's data from client.", err)
-		return
-	}
-	// insert advertiser into advertiser table
-	if err := insertAdvertiser(advertiser); err != nil {
-		if err.Error() == "Failed to connect MySQL database" {
-			http.Error(w, "Failed to connect MySQL database.", 500)
-		} else if err.Error() == "Failed to select from advertiser table" {
-			http.Error(w, "Failed to select from advertiser table.", 500)
-		} else if err.Error() == "Advertiser already exists" {
-			http.Error(w, "Advertiser already exists.", 400)
-		} else if err.Error() == "Failed to insert into advertiser table" {
-			http.Error(w, "Failed to insert into advertiser table.", 500)
-		}
-		return
-	}
-	w.Write([]byte("Advertiser added successfully"))
-
-}
-
-/*
-add an ad into ad table
-return:
-	error
-	nil
-*/
-func insertAd(ad Ad) error {
-	db, err := sql.Open("mysql", "root:root@(localhost:3306)/AdSysGo")
-	if err != nil {
-		return errors.New("Failed to connect MySQL database")
-	}
-
-	insert, err := db.Query("INSERT INTO ad (bid, image_url, advertiser_id, ad_score) VALUES (?, ?, ?, ?)", ad.Bid, ad.ImageURL, ad.AdvertiserID, ad.AdScore)
-	if err != nil {
-		return errors.New("Failed to add into ad table")
-	}
-	defer insert.Close()
-
-	return nil
-}
-
-/*
-HanldeFunction
-use "insertAd" to add an ad into ad table
-*/
-func handleFuncAddAd(w http.ResponseWriter, req *http.Request) {
-	fmt.Println("Received one ad insertion request")
-	w.Header().Set("Content-Type", "text/plain")
-
-	if req.Method != "POST" {
-		return
-	}
-
-	// decode the json format info into Ad type
-	decoder := json.NewDecoder(req.Body)
-	var ad Ad
-	if err := decoder.Decode(&ad); err != nil {
-		http.Error(w, "Cannot decode ad's data from client", 400)
-		fmt.Println("Cannot decode ad's data from client.", err)
-		return
-	}
-	// insert ad into ad table
-	if err := insertAd(ad); err != nil {
-		http.Error(w, "Failed to add advertisement data into ad table.", 400)
-		return
-	}
-	w.Write([]byte("Ad added successfully"))
-
+// SearchAdsByAdvertiserIDProcess type
+type SearchAdsByAdvertiserIDProcess struct {
+	AdvertiserID int `json:"advertiser_id"`
 }
 
 /*
@@ -175,7 +55,7 @@ return:
 */
 func selectAllAds() ([]Ad, error) {
 	// connect to MySQL database
-	db, err := sql.Open("mysql", "root:root@(localhost:3306)/AdSysGo")
+	db, err := sql.Open("mysql", mysqlDataSourceName)
 	if err != nil {
 		return nil, errors.New("Failed to connect the database")
 	}
@@ -214,7 +94,7 @@ return
 */
 func updateBudget(cost float64, advertiserID int) error {
 	// connect to database
-	db, err := sql.Open("mysql", "root:root@(localhost:3306)/AdSysGo")
+	db, err := sql.Open("mysql", mysqlDataSourceName)
 	if err != nil {
 		return errors.New("Failed to connect the database")
 	}
@@ -270,7 +150,7 @@ func handleFuncChooseAd(w http.ResponseWriter, req *http.Request) {
 		} else if err.Error() == "Failed to select all the ads from MySQL database" {
 			http.Error(w, "Failed to select all the ads from MySQL database.", 500)
 		} else if err.Error() == "Failed to convert MySQL data into Ad type" {
-			http.Error(w, "Failed to convert MySQL data into Ad type", 500)
+			http.Error(w, "Failed to convert MySQL data into Ad type.", 500)
 		}
 		return
 	}
@@ -332,6 +212,14 @@ func main() {
 	http.HandleFunc("/addAd", handleFuncAddAd)
 	// handler3: get: retrieve top ranked ad from db and update dudget of the advertiser
 	http.HandleFunc("/chooseAd", handleFuncChooseAd)
+	// handler4: post: add budget of an advertiser
+	http.HandleFunc("/addBudget", handleFuncAddBudget)
+	// handler5: post: search an advertiser with name
+	http.HandleFunc("/searchAdvertiser", handleFuncSearchAdvertiser)
+	// handler6: post: select all ads with with advertiser_id
+	http.HandleFunc("/searchAdsByAdvertiserID", handleFuncSearchAdsByAdvertiserID)
+	// handler7: post: delete an ad with ad_id
+	http.HandleFunc("/deleteAd", handleFuncDeleteAd)
 
 	http.ListenAndServe("localhost:8080", nil)
 }

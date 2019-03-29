@@ -7,10 +7,14 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
+const (
+	mysqlDataSourceName = "root:root@tcp(www.fyz34.com:9500)/ad_sys"
+)
+
 func main() {
 
 	// connect to db
-	db, err := sql.Open("mysql", "root:root@tcp(13.59.38.240:9500)/ad_sys")
+	db, err := sql.Open("mysql", mysqlDataSourceName)
 	// if there is an error opening the connection, handle it
 	if err != nil {
 		panic(err.Error())
