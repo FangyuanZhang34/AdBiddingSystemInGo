@@ -1,0 +1,8 @@
+*.md
+.git
+.DS_Store
+.gitignore
+README.md
+
+MySQL/**/*
+MySQL
